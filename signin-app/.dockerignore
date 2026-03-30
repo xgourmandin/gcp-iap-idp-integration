@@ -1,0 +1,8 @@
+node_modules
+.git
+dist
+*.log
+.env
+.env.*
+# .npmrc is intentionally NOT ignored — Docker build needs legacy-peer-deps=true
+

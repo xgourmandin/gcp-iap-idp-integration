@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sign In — IAP Demo</title>
+    <style>
+      /* ── Reset & base ─────────────────────────────────── */
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+      body {
+        font-family: "Google Sans", "Roboto", Arial, sans-serif;
+        background: #f0f4f8;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #202124;
+      }
+
+      /* ── Card ─────────────────────────────────────────── */
+      .card {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 4px 24px rgba(0,0,0,.12);
+        padding: 48px 40px 40px;
+        width: 100%;
+        max-width: 420px;
+        text-align: center;
+      }
+
+      .card__logo {
+        width: 64px;
+        margin-bottom: 24px;
+      }
+
+      .card__title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin-bottom: 8px;
+      }
+
+      .card__subtitle {
+        font-size: 0.9rem;
+        color: #5f6368;
+        margin-bottom: 36px;
+      }
+
+      /* ── Sign-in form ──────────────────────────────────── */
+      #signin-form {
+        display: none;         /* shown by JS after gcip-iap calls handleSignedOutUser */
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        width: 100%;
+        padding: 12px 20px;
+        border: none;
+        border-radius: 8px;
+        font-size: 0.95rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 0.2s, box-shadow 0.2s;
+      }
+
+      .btn--google {
+        background: #fff;
+        border: 1px solid #dadce0;
+        color: #3c4043;
+      }
+      .btn--google:hover {
+        background: #f8f9fa;
+        box-shadow: 0 2px 8px rgba(0,0,0,.1);
+      }
+      .btn--google svg { flex-shrink: 0; }
+
+      .btn--auth0 {
+        background: #eb5424;
+        color: #fff;
+        border: none;
+      }
+      .btn--auth0:hover {
+        background: #d44a1e;
+        box-shadow: 0 2px 8px rgba(0,0,0,.15);
+      }
+      .btn--auth0 svg { flex-shrink: 0; }
+
+      /* ── Divider ───────────────────────────────────────── */
+      .divider {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: #9aa0a6;
+        font-size: 0.8rem;
+      }
+      .divider::before, .divider::after {
+        content: "";
+        flex: 1;
+        height: 1px;
+        background: #e0e0e0;
+      }
+
+      /* ── Loading overlay ───────────────────────────────── */
+      #loading-overlay {
+        display: flex;      /* hidden via JS when needed */
+        flex-direction: column;
+        align-items: center;
+        gap: 16px;
+        padding: 16px 0;
+      }
+
+      .spinner {
+        width: 36px; height: 36px;
+        border: 3px solid #e0e0e0;
+        border-top-color: #1a73e8;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+
+      #loading-message { font-size: 0.9rem; color: #5f6368; }
+
+      /* ── Error banner ──────────────────────────────────── */
+      #error-banner {
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        gap: 8px;
+        background: #fce8e6;
+        border-radius: 8px;
+        padding: 12px 16px;
+        margin-top: 16px;
+      }
+      #error-message { font-size: 0.85rem; color: #c5221f; word-break: break-word; }
+    </style>
+  </head>
+
+  <body>
+    <main class="card">
+      <!-- GCP lock icon (inline SVG, no external dependency) -->
+      <svg class="card__logo" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect width="64" height="64" rx="12" fill="#e8f0fe"/>
+        <path d="M32 12a10 10 0 0 0-10 10v4H18a4 4 0 0 0-4 4v18a4 4 0 0 0 4 4h28a4 4 0 0 0 4-4V30a4 4 0 0 0-4-4h-4v-4a10 10 0 0 0-10-10Zm0 4a6 6 0 0 1 6 6v4H26v-4a6 6 0 0 1 6-6Zm0 16a4 4 0 1 1 0 8 4 4 0 0 1 0-8Z" fill="#1a73e8"/>
+      </svg>
+
+      <h1 class="card__title">Sign in to continue</h1>
+      <p class="card__subtitle">Access is protected by Google Cloud IAP</p>
+
+      <!-- Loading state (shown immediately while JS boots) -->
+      <div id="loading-overlay">
+        <div class="spinner" aria-label="Loading"></div>
+        <span id="loading-message">Checking your session…</span>
+      </div>
+
+      <!-- Sign-in options (shown by gcip-iap when user is not authenticated) -->
+      <div id="signin-form" role="form" aria-label="Sign-in options">
+        <!-- Google provider -->
+        <button id="btn-google" class="btn btn--google" type="button">
+          <!-- Google "G" logo -->
+          <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true">
+            <path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.2l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.6 5.4 2.6 13.3l7.9 6.1C12.5 13 17.8 9.5 24 9.5z"/>
+            <path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 2.9-2.2 5.3-4.6 7l7.4 5.7c4.3-4 6.9-9.9 6.9-16.7z"/>
+            <path fill="#FBBC05" d="M10.5 28.6A14.6 14.6 0 0 1 9.5 24c0-1.6.3-3.1.7-4.6l-7.9-6.1A23.8 23.8 0 0 0 0 24c0 3.8.9 7.4 2.6 10.6l7.9-6z"/>
+            <path fill="#34A853" d="M24 48c6.3 0 11.6-2.1 15.5-5.7l-7.4-5.7c-2.1 1.4-4.8 2.3-8.1 2.3-6.2 0-11.5-4.2-13.5-9.9l-7.9 6C6.6 42.6 14.6 48 24 48z"/>
+            <path fill="none" d="M0 0h48v48H0z"/>
+          </svg>
+          Continue with Google
+        </button>
+
+        <div class="divider" aria-hidden="true">or</div>
+
+        <!-- Auth0 OIDC provider -->
+        <button id="btn-auth0" class="btn btn--auth0" type="button">
+          <!-- Auth0 logo mark -->
+          <svg width="20" height="20" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M44.2 6H19.8L12 29.2l20 28.8 20-28.8L44.2 6Z" fill="#fff" fill-opacity=".9"/>
+            <path d="M44.2 6H32v52l20-28.8L44.2 6Z" fill="#fff" fill-opacity=".5"/>
+            <path d="M19.8 6 12 29.2h20.1L44.2 6H19.8Z" fill="#fff" fill-opacity=".7"/>
+          </svg>
+          Continue with Auth0
+        </button>
+      </div>
+
+      <!-- Error banner (populated by JS) -->
+      <div id="error-banner" role="alert" aria-live="assertive">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" fill="#c5221f"/>
+        </svg>
+        <span id="error-message"></span>
+      </div>
+    </main>
+
+    <!-- Client bundle (built from src/client/app.ts via esbuild) -->
+    <script src="/bundle.js"></script>
+  </body>
+</html>
+

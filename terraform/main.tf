@@ -6,33 +6,46 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 7.0"
     }
+    google-beta = {
+      source  = "hashicorp/google-beta"
+      version = "~> 7.0"
+    }
   }
 }
 
 provider "google" {
-  project = var.project_id
-  region  = var.region
+  project               = var.project_id
+  region                = var.region
+  user_project_override = true
 }
 
-resource "google_storage_bucket" "main" {
-  name          = var.bucket_name
-  location      = var.bucket_location
-  project       = var.project_id
-  force_destroy = false
-
-  # Prevent public access
-  public_access_prevention = "enforced"
-
-  # Uniform bucket-level access (IAM-only, no ACLs)
-  uniform_bucket_level_access = true
-
-  versioning {
-    enabled = true
-  }
-
-  labels = {
-    environment = var.environment
-    managed_by  = "terraform"
-  }
+provider "google-beta" {
+  project               = var.project_id
+  region                = var.region
+  user_project_override = true
 }
 
+# ─────────────────────────────────────────────
+# Required GCP API enablement
+# ─────────────────────────────────────────────
+locals {
+  required_apis = [
+    "run.googleapis.com",
+    "compute.googleapis.com",
+    "dns.googleapis.com",
+    "certificatemanager.googleapis.com",
+    "iap.googleapis.com",
+    "identitytoolkit.googleapis.com",
+    "cloudresourcemanager.googleapis.com",
+    "iam.googleapis.com",
+    "artifactregistry.googleapis.com"
+  ]
+}
+
+resource "google_project_service" "apis" {
+  for_each = toset(local.required_apis)
+
+  project            = var.project_id
+  service            = each.value
+  disable_on_destroy = false
+}
